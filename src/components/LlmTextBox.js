@@ -6,7 +6,7 @@ const LlmTextBox = ({ value, onChange }) => {
       className="ai-text-area"
       placeholder="AI notes will appear here..."
       value={value}
-      readOnly
+      onChange={(e) => onChange(e.target.value)}
     />
   );
 };

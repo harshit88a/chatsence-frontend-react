@@ -4,7 +4,7 @@ import UserTextBox from './components/UserTextBox';
 import LlmTextBox from './components/LlmTextBox';
 import SavedNotesPane from './components/SavedNotesPane';
 
-const CHAR_THRESHOLD = 250;
+const WORD_THRESHOLD = 50;
 
 function App() {
   const [topic, setTopic] = useState('');
@@ -19,9 +19,6 @@ function App() {
   const [llmResponseData, setLlmResponseData] = useState(null);
   const [viewMode, setViewMode] = useState('edit'); // 'edit' or 'display'
   const [activeNote, setActiveNote] = useState(null); // Note being displayed
-
-  // Auto-save functionality
-  const [autoSaveTimeout, setAutoSaveTimeout] = useState(null);
 
   // Collapsible panels state
   const [filesCollapsed, setFilesCollapsed] = useState(false);
@@ -42,27 +39,6 @@ function App() {
       localStorage.setItem('savedNotes', JSON.stringify(notes));
     }
   }, []);
-
-  // Auto-save when user stops typing
-  useEffect(() => {
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
-    }
-
-    if (userText.length > 100 && isFinished && llmText.trim() !== '' && !loading) {
-      const timeout = setTimeout(() => {
-        handleAutoSave();
-      }, 2000); // Auto-save after 2 seconds of inactivity
-
-      setAutoSaveTimeout(timeout);
-    }
-
-    return () => {
-      if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
-      }
-    };
-  }, [userText, llmText, isFinished]);
 
   // Function to create Google Calendar URL
   const createGoogleCalendarUrl = (meetingDetails) => {
@@ -387,6 +363,17 @@ function App() {
   };
 
   // Handle schedule meeting button click - opens Google Calendar
+  // Handle create reminders button click
+  const handleCreateReminders = (tasks) => {
+    if (!tasks || tasks.length === 0) {
+      alert('No tasks available to create reminders.');
+      return;
+    }
+    // For now, just show a success message (could integrate with a calendar/reminder API)
+    alert(`Reminders created for tasks:\n${tasks.join('\n')}`);
+    console.log('Reminders created for tasks:', tasks);
+  }
+
   const handleScheduleMeeting = (meetingDetails) => {
     if (!meetingDetails || meetingDetails.length === 0) {
       alert('No meeting details available to schedule.');
@@ -408,7 +395,8 @@ function App() {
   };
 
   const getLlmUpdate = async (isFinal = false) => {
-    if (userText.length - lastApiCallLength.current < CHAR_THRESHOLD && !isFinal) {
+    const wordCount = userText.trim().split(/\s+/).length;
+    if (wordCount - lastApiCallLength.current < WORD_THRESHOLD && !isFinal) {
       return;
     }
 
@@ -416,6 +404,7 @@ function App() {
     setLoading(true);
     if (!isFinal) {
       setLlmText(llmText + '...');
+      lastApiCallLength.current = wordCount;
     } else {
       setLlmText('Processing final notes...');
     }
@@ -473,28 +462,7 @@ function App() {
     getLlmUpdate(true);
   };
 
-  const handleAutoSave = () => {
-    if (llmText.trim() !== '' && !loading && !savedNotes.find(note =>
-      note.topic === (topic || 'Untitled') &&
-      note.userScribbles === userText &&
-      note.generatedNotes === llmText
-    )) {
-      const newNote = {
-        id: Date.now(),
-        topic: topic || 'Untitled',
-        tone: tone,
-        userScribbles: userText,
-        generatedNotes: llmText,
-        tasks: llmResponseData?.tasks || [],
-        meeting: llmResponseData?.meeting || [],
-        createdAt: new Date().toISOString(),
-        editedAt: new Date().toISOString(),
-      };
-      const updatedNotes = [...savedNotes, newNote];
-      setSavedNotes(updatedNotes);
-      localStorage.setItem('savedNotes', JSON.stringify(updatedNotes));
-    }
-  };
+
 
   const handleSaveNote = () => {
     if (llmText.trim() !== '' && !loading) {
@@ -701,7 +669,7 @@ function App() {
               className="ai-text-area"
               placeholder="AI notes will appear here..."
               value={llmText}
-              readOnly
+              onChange={e => setLlmText(e.target.value)}
             />
           )}
         </div>
@@ -806,7 +774,12 @@ function App() {
             <ul>
               {activeNote.tasks.map((task, index) => <li key={index}>{task}</li>)}
             </ul>
-            <button className="suggestion-button">Create Reminders</button>
+            <button
+              className="suggestion-button"
+              onClick={() => handleCreateReminders(activeNote.tasks)}
+            >
+              Create Reminders
+            </button>
           </div>
         )}
         {activeNote.meeting && activeNote.meeting.length > 0 && (
